@@ -56,6 +56,7 @@ public final class Scheduler {
 
     private static final int MMAP = 9;
     private static final int FUTEX = 202;
+    private static final int NANOSLEEP = 35;
     private static final int CLOCK_GETTIME = 228;
     private static final long PROT_READ_WRITE = 1 | 2;
     private static final long MAP_PRIVATE_ANONYMOUS_NORESERVE = 0x02 | 0x20 | 0x4000;
@@ -65,6 +66,7 @@ public final class Scheduler {
     /** CLONE_VM, FS, FILES, SIGHAND, THREAD, SYSVSEM, PARENT_SETTID and CHILD_CLEARTID. */
     private static final long CLONE_FLAGS = 0x100 | 0x200 | 0x400 | 0x800 | 0x10000 | 0x40000 | 0x100000 | 0x200000;
     private static final long NANOS_PER_SECOND = 1_000_000_000L;
+    private static final long NANOS_PER_MILLI = 1_000_000L;
 
     static final int MAX_THREADS = 256;
     /** As main's (Compiler.USER_STACK_SIZE), and HotSpot's default; touched pages only. */
@@ -254,8 +256,15 @@ public final class Scheduler {
         Magic.pause();
     }
 
+    /** A blocking system call, so a collection doesn't wait for this thread to reach a safepoint. */
     public static void sleep(long millis) {
-        throw new UnsupportedOperationException("a user program can't sleep yet");
+        if (millis <= 0) {
+            return;
+        }
+        Task self = current();
+        self.time[0] = millis / 1000;
+        self.time[1] = millis % 1000 * NANOS_PER_MILLI;
+        Smp.blockingSyscall(NANOSLEEP, address(self.time), 0, 0, 0);
     }
 
     public static void join(Task task) {
