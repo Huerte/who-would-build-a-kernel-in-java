@@ -1,6 +1,12 @@
 package duke.user;
 
-/** Thread.sleep: output ordering only, including a collection while another thread sleeps. */
+/**
+ * Thread.sleep: output ordering only, including a collection while another thread sleeps.
+ *
+ * <p>The 6 s sleep is intentional: if sleep used a plain Magic.syscall instead of
+ * Smp.blockingSyscall the GC's stopOthers would time out (5 s limit) and panic before the
+ * sleeper ever reached a safepoint, catching that regression.
+ */
 class Sleep {
 
     private static void sleep(long millis) {
@@ -10,6 +16,9 @@ class Sleep {
             throw new RuntimeException(e);
         }
     }
+
+    /** Set by the asleep thread; read by main after join so the output order is deterministic. */
+    private static volatile boolean asleepWoke;
 
     static void main() throws InterruptedException {
         Thread sleeper = new Thread(() -> {
@@ -25,8 +34,8 @@ class Sleep {
         System.out.println("slept 0");
 
         Thread asleep = new Thread(() -> {
-            sleep(300);
-            System.out.println("asleep woke");
+            sleep(6_000);
+            asleepWoke = true;
         });
         asleep.start();
         long total = 0;
@@ -35,6 +44,7 @@ class Sleep {
         }
         System.out.println("allocated " + total);
         asleep.join();
+        System.out.println("asleep woke " + asleepWoke);
         System.out.println("done");
     }
 }
